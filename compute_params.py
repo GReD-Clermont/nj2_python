@@ -17,7 +17,7 @@ try:
     from scipy.spatial import Delaunay
     import numpy as np
     import pandas as pd
-    
+
 except ImportError as e:
     print("[Warning] Some packages are missing. Installing...")
     install(['tifffile', 'scikit-image', 'scipy', 'numpy', 'pandas'])
@@ -382,6 +382,7 @@ def compute_directory(path, spacing=(), out_path="params.csv", verbose=False):
 
     df = pd.DataFrame(params)
     df.to_csv("params.csv", index=False)
+    # df.to_excel("params.xlsx", index=False)
 
 #---------------------------------------------------------------------------
 # Argparse
