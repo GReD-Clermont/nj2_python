@@ -1,13 +1,33 @@
 import argparse
 import os
+import subprocess
+import sys
 
-import tifffile as tiff
-from skimage import measure
-from skimage.transform import resize
-from skimage import io
-from scipy.spatial import Delaunay
-import numpy as np
-import pandas as pd
+def install(packages):
+    """Install a list of packages.
+    """
+    for p in packages:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", p])
+
+try:
+    import tifffile as tiff
+    from skimage import measure
+    from skimage.transform import resize
+    from skimage import io
+    from scipy.spatial import Delaunay
+    import numpy as np
+    import pandas as pd
+    
+except ImportError as e:
+    print("[Warning] Some packages are missing. Installing...")
+    install(['tifffile', 'scikit-image', 'scipy', 'numpy', 'pandas'])
+    import tifffile as tiff
+    from skimage import measure
+    from skimage.transform import resize
+    from skimage import io
+    from scipy.spatial import Delaunay
+    import numpy as np
+    import pandas as pd
 
 #---------------------------------------------------------------------------
 # Image reader
