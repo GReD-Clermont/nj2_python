@@ -304,7 +304,7 @@ def compute_volume_surface_sphericity(img_path, spacing=(), verbose=False):
 
     # read image
     img, metadata = imread(img_path)
-    if len(metadata['spacing'])!=0: spacing = metadata['spacing']
+    if len(metadata['spacing'])!=0 and len(spacing)==0: spacing = metadata['spacing']
         
     assert len(img.shape)==3 or (len(img.shape)==4 and img.shape[0]==1), "[Error] Strange image shape ({}). Please provide a 3d image".format(img.shape)
     
