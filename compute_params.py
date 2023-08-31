@@ -385,7 +385,7 @@ def compute_directory(path, spacing=(), out_path="params.csv", verbose=False):
         params['sphericity'] += [spher]
 
     df = pd.DataFrame(params)
-    df.to_csv("params.csv", index=False)
+    df.to_csv(out_path, index=False)
     # df.to_excel("params.xlsx", index=False)
 
 #---------------------------------------------------------------------------
