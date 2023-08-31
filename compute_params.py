@@ -304,7 +304,7 @@ def compute_volume_surface_sphericity(img_path, spacing=(), verbose=False):
 
     # read image
     img, metadata = imread(img_path)
-    if len(metadata['spacing'])!=0 and len(spacing)==0: spacing = metadata['spacing']
+    if len(metadata['spacing'])!=0 and len(spacing)==0: spacing = np.array(metadata['spacing'])
         
     assert len(img.shape)==3 or (len(img.shape)==4 and img.shape[0]==1), "[Error] Strange image shape ({}). Please provide a 3d image".format(img.shape)
     
@@ -318,17 +318,21 @@ def compute_volume_surface_sphericity(img_path, spacing=(), verbose=False):
             img = np.expand_dims(img, 0)
         img = resize_3d(img, output_shape, order=1, is_msk=True)[0]
     
+    # sanity check: only 0 or 1 label are allowed
+    unq, counts = np.unique(img, return_counts=True)
+    if len(unq)!=2:
+        print("[Warning] Only 2 class annotations are allowed (0 or 1) but found {}. A threshold will be applied but might causes some issues.".format(unq))
+        # set background voxels to 0 and foreground to 1
+        img = (img != unq[np.argmax(counts)]).astype(np.uint8)
+
     # compute volume with voxel
     labels = measure.label(img, background=0)
     unq,vol_voxel = np.unique(labels, return_counts=True)
-    
-    if len(unq)!=2:
-        print("[Warning] Only 2 class annotations are allowed (0 or 1) but found {}. A threshold will be applied but might causes some issues.".format(unq))
+
+    if len(unq)>2:
+        print("[Warning] More than one object were found in the image. Number of connected components: {}".format(len(unq)-1))
     
     if verbose: print("Voxel volume:", vol_voxel[1:])
-    
-    # set background voxels to 0 and foreground to 1
-    img = (img != unq[np.argmax(vol_voxel)]).astype(np.uint8)
     
     # Marching cube
     verts, faces, normals, values = measure.marching_cubes(img, 0.5) 
