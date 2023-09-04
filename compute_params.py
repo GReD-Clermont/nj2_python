@@ -375,6 +375,7 @@ def compute_volume_surface_sphericity(img, bg=None, spacing=(), verbose=False):
         unq,vol_voxel = np.unique(labels, return_counts=True)
         vol_voxel = np.sum(vol_voxel[1:])
         if len(spacing)>0: vol_voxel=vol_voxel*np.prod(spacing)
+        print("Number of labels:", unq)
         print("Volume (voxel):", vol_voxel)
         print("Volume (mesh):", volume)
         print("Surface:", surface)
@@ -424,8 +425,7 @@ def compute_flatness_elongation(img, bg=None, spacing=(), verbose=False):
     cov = fg.T.dot(fg)/len(fg)
 
     # get the eigenvalues
-    # eigval = sorted(np.linalg.eig(cov)[0])
-    eigval = np.linalg.eig(cov)[0]
+    eigval = sorted(np.linalg.eig(cov)[0])
 
     # compute flatness and elongation
     flatness = np.sqrt(eigval[1]/eigval[0])
