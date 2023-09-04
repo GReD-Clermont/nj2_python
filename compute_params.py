@@ -519,7 +519,7 @@ class ComputeParams:
         self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = compute_number_vmean_vtot(img=self.nc_imag, cc_img=self.cc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
 
         # add RHF
-        self.cc_params['RHF'] = self.cc_params['cc_vmean']/self.nc_params['volume']
+        self.cc_params['RHF'] = self.cc_params['cc_vtot']/self.nc_params['volume']
     
     def __str__(self):
         out = "filename: {}\n".format(self.nc_path)
