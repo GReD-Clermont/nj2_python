@@ -296,12 +296,7 @@ def compute_sphericity(volume, surface):
 #---------------------------------------------------------------------------
 # Compute volume, surface and mesh
 
-def compute_volume_surface_sphericity(img_path, spacing=(), verbose=False):
-    """Read a binary image and return the volume, the surface and the spericity of the objects in the image.
-    """
-    if len(spacing)>0:
-        spacing = np.array(spacing, dtype=np.float64)
-
+def safe_imread(img_path, spacing=()):
     # read image
     img, metadata = imread(img_path)
     if len(metadata['spacing'])!=0 and len(spacing)==0: spacing = np.array(metadata['spacing'])
@@ -324,30 +319,48 @@ def compute_volume_surface_sphericity(img_path, spacing=(), verbose=False):
         print("[Warning] Only 2 class annotations are allowed (0 or 1) but found {}. A threshold will be applied but might causes some issues.".format(unq))
         # set background voxels to 0 and foreground to 1
         img = (img != unq[np.argmax(counts)]).astype(np.uint8)
+    return img, metadata
 
-    # compute volume with voxel
-    labels = measure.label(img, background=0)
-    unq,vol_voxel = np.unique(labels, return_counts=True)
+def compute_volume_surface_sphericity(img, bg=None, spacing=(), verbose=False):
+    """Compute volume, surface and sphericity of a volumetric object.
 
-    if len(unq)>2:
-        print("[Warning] More than one object were found in the image. Number of connected components: {}".format(len(unq)-1))
-    
-    if verbose: print("Voxel volume:", vol_voxel[1:])
+    Parameters
+    ----------
+    img : numpy.ndarray
+        Image array.
+    bg : int, default=None
+        Value of the background voxels. If bg is None then use the most frequent value.
+    spacing : tuple, default=()
+        Image spacing.
+    verbose : boolean, default=False
+        Whether to display information.
+    """
+    if bg is None:
+        # compute volume with voxel
+        labels = measure.label(img, background=0)
+        unq,vol_voxel = np.unique(labels, return_counts=True)
+
+        if len(unq)>2:
+            print("[Warning] More than one object were found in the image. Number of connected components: {}".format(len(unq)-1))
+
+        if verbose: print("Voxel volume:", vol_voxel[1:])
+
+        bg = unq[0]
     
     # Marching cube
     verts, faces, normals, values = measure.marching_cubes(img, 0.5) 
     
     # create and sort correct tetrahedron to obtain a volume mesh
-    tetra = mesh3d(verts, img, remove_label=unq[0])
+    tetra = mesh3d(verts=verts, img=img, remove_label=bg)
     
     # compute the volume
     volume = tetramesh_vol(verts[tetra[:,0]],verts[tetra[:,1]],verts[tetra[:,2]],verts[tetra[:,3]])
     
     # compute the surface
-    surface = measure.mesh_surface_area(verts, faces)
+    surface = measure.mesh_surface_area(verts=verts, faces=faces)
     
     # compute the sphericity
-    sphericity = compute_sphericity(volume, surface)
+    sphericity = compute_sphericity(volume=volume, surface=surface)
     
     # eventually adapt to spacing
     if len(spacing)>0:
@@ -362,29 +375,107 @@ def compute_volume_surface_sphericity(img_path, spacing=(), verbose=False):
     
     return volume, surface, sphericity
 
-def compute_directory(path, spacing=(), out_path="params.csv", verbose=False):
+def compute_flatness_elongation(img, bg=None, spacing=(), verbose=False):
+    if bg is None:
+        # compute volume with voxel
+        labels = measure.label(img, background=0)
+        unq,vol_voxel = np.unique(labels, return_counts=True)
+
+        if len(unq)>2:
+            print("[Warning] More than one object were found in the image. Number of connected components: {}".format(len(unq)-1))
+
+        if verbose: print("Voxel volume:", vol_voxel[1:])
+
+        bg = unq[0]
+
+    # get foreground voxel coordinates
+    fg = np.argwhere(img != bg)
+
+    # compute barycenter and update fg
+    bary = np.mean(fg,axis=0)
+    fg = fg - bary
+
+    if len(spacing)>0:
+        fg = fg*np.array(spacing)
+
+    # get the covariance matrix
+    cov = fg.T.dot(fg)/len(fg)
+
+    # get the eigenvalues
+    eigval = np.linalg.eig(cov)[0]
+
+    # compute flatness and elongation
+    flatness = np.sqrt(eigval[1]/eigval[0])
+    elongation = np.sqrt(eigval[2]/eigval[1])
+
+    return flatness, elongation
+
+class ComputeParams:
+    """Compute Nucleus and Chromocenter parameters.
+
+    Parameters
+    ----------
+    nc_path : str
+        Path to the nucleus image.
+    bg : int, default=0
+        Value of the background voxels.
+    spacing : tuple, default=()
+        Image spacing.
+    verbose : boolean, default=False
+        Whether to display information.
+    """
+    NUCLEUS_KEYS = [
+        'volume',
+        'surface',
+        'sphericity',
+        'flatness',
+        'elongation',
+    ]
+
+    def __init__(self, nc_path, bg=0, spacing=(), verbose=False):
+        # stores nucleus parameters
+        self.nc_params = {}
+
+        # path and spacing
+        self.nc_path = nc_path
+        self.spacing  = np.array(spacing, dtype=np.float64)
+
+        # read nucleus image and metadata
+        self.nc_imag, self.nc_meta = safe_imread(img_path=self.nc_path, spacing=self.spacing)
+
+        # nucleus volume, surface and sphericity computation
+        self.nc_params['volume'], self.nc_params['surface'], self.nc_params['sphericity'] = compute_volume_surface_sphericity(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
+
+        # nucleus flatness and elongation
+        self.nc_params['flatness'], self.nc_params['elongation'] = compute_flatness_elongation(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
+    
+    def __str__(self):
+        out = "filename: {}\n".format(self.nc_path)
+        return out+"".join("{}: {}\n".format(k, v) for k,v in self.nc_params.items())
+
+
+def compute_directory(path, bg=0, spacing=(), out_path="params.csv", verbose=False):
     """Same as compute_volume_surface_sphericity but on a directory. Output results in a csv file.
     """
     if len(spacing)>0:
         spacing = np.array(spacing, dtype=np.float64)
 
     filenames = os.listdir(path)
-    params = {
-        'filename': filenames,
-        'volume': [],
-        'surface': [],
-        'sphericity': [],
-    }
+    out_params = {'filename': filenames}
+    for k in ComputeParams.NUCLEUS_KEYS: out_params[k]=[]
 
     for i in range(len(filenames)):
         print("[{}/{}] Computing parameters for {}".format(i,len(filenames),filenames[i]))
         img_path = os.path.join(path, filenames[i])
-        volu, surf, spher = compute_volume_surface_sphericity(img_path, spacing=spacing, verbose=verbose)
-        params['volume'] += [volu]
-        params['surface'] += [surf]
-        params['sphericity'] += [spher]
 
-    df = pd.DataFrame(params)
+         # compute parameters for that image
+        comp_params = ComputeParams(img_path, bg=bg, spacing=spacing, verbose=verbose)
+
+        # store nucleus parameters in the output dictionary
+        for k,v in comp_params.nc_params.items():
+            out_params[k] += [v]
+
+    df = pd.DataFrame(out_params)
     df.to_csv(out_path, index=False)
     # df.to_excel("params.xlsx", index=False)
 
@@ -398,9 +489,12 @@ if __name__=='__main__':
         help="Path to an image.")
     parser.add_argument("-s", "--spacing", type=str, nargs='+', default=(),
         help="Image spacing. Example: 0.1032 0.1032 0.2")
+    parser.add_argument("-b", "--bg_value", type=int, default=0,
+        help="(default=0) Value of the background voxels.")
     args = parser.parse_args()
     
     if os.path.isdir(args.path):
-        compute_directory(args.path, spacing=args.spacing, out_path="params.csv", verbose=False)
+        compute_directory(args.path, bg=args.bg_value, spacing=args.spacing, out_path="params.csv", verbose=False)
     else:
-        compute_volume_surface_sphericity(args.path, spacing=args.spacing, verbose=True)
+        params = ComputeParams(args.path, spacing=args.spacing, verbose=False)
+        print(params)
