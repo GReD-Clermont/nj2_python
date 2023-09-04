@@ -371,7 +371,12 @@ def compute_volume_surface_sphericity(img, bg=None, spacing=(), verbose=False):
     
     # display
     if verbose:
-        print("Volume:", volume)
+        labels = measure.label(img, background=bg)
+        unq,vol_voxel = np.unique(labels, return_counts=True)
+        vol_voxel = np.sum(vol_voxel[1:])
+        if len(spacing)>0: vol_voxel=vol_voxel*np.prod(spacing)
+        print("Volume (voxel):", vol_voxel)
+        print("Volume (mesh):", volume)
         print("Surface:", surface)
         print("Sphericity:", sphericity)
     
@@ -444,7 +449,8 @@ def compute_number_vmean_vtot(img, cc_img, bg=None, spacing=(), verbose=False):
         bg = unq[np.argmax(vol_voxel)]
     
     # select only chromocenters in the nucleus
-    labels = measure.label(np.logical_and(img!=bg,cc_img!=bg).astype(int), background=bg)
+    # CAREFUL: the connectivity is set to 1!
+    labels = measure.label(np.logical_and(img!=bg,cc_img!=bg).astype(int), background=bg, connectivity=1)
     
     # compute volumes
     unq,vol_voxel = np.unique(labels, return_counts=True)
@@ -573,10 +579,12 @@ if __name__=='__main__':
         help="Image spacing. Example: 0.1032 0.1032 0.2")
     parser.add_argument("-b", "--bg_value", type=int, default=0,
         help="(default=0) Value of the background voxels.")
+    parser.add_argument("-v", "--verbose", default=False,  action='store_true', dest='verbose',
+        help="Display some information.") 
     args = parser.parse_args()
     
     if os.path.isdir(args.path):
-        compute_directory(path=args.path, cc_path=args.chromo, bg=args.bg_value, spacing=args.spacing, out_path="params.csv", verbose=False)
+        compute_directory(path=args.path, cc_path=args.chromo, bg=args.bg_value, spacing=args.spacing, out_path="params.csv", verbose=args.verbose)
     else:
-        params = ComputeParams(nc_path=args.path, cc_path=args.chromo, spacing=args.spacing, verbose=False)
+        params = ComputeParams(nc_path=args.path, cc_path=args.chromo, spacing=args.spacing, verbose=args.verbose)
         print(params)
