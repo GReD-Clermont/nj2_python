@@ -514,7 +514,8 @@ class ComputeParams:
         self.nc_imag, self.nc_meta = safe_imread(img_path=self.nc_path, spacing=self.spacing)
 
         # read chromocenter image and metadata
-        self.cc_imag, self.cc_meta = safe_imread(img_path=cc_path, spacing=self.spacing)
+        if cc_path is not None:
+            self.cc_imag, self.cc_meta = safe_imread(img_path=cc_path, spacing=self.spacing)
 
         # nucleus volume, surface and sphericity computation
         self.nc_params['volume'], self.nc_params['surface'], self.nc_params['sphericity'] = compute_volume_surface_sphericity(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
@@ -523,10 +524,16 @@ class ComputeParams:
         self.nc_params['flatness'], self.nc_params['elongation'] = compute_flatness_elongation(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
 
         # chromocenters computation
-        self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = compute_number_vmean_vtot(img=self.nc_imag, cc_img=self.cc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
+        if cc_path is not None:
+            self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = compute_number_vmean_vtot(img=self.nc_imag, cc_img=self.cc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
 
-        # add RHF
-        self.cc_params['RHF'] = self.cc_params['cc_vtot']/self.nc_params['volume']
+            # add RHF
+            self.cc_params['RHF'] = self.cc_params['cc_vtot']/self.nc_params['volume']
+        else:
+            self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = 0, 0, 0
+            self.cc_params['RHF'] = np.inf
+
+        
     
     def __str__(self):
         out = "filename: {}\n".format(self.nc_path)
