@@ -300,9 +300,16 @@ def safe_imread(img_path, spacing=()):
     # read image
     img, metadata = imread(img_path)
     if len(metadata['spacing'])!=0 and len(spacing)==0: spacing = np.array(metadata['spacing'])
-        
+
     assert len(img.shape)==3 or (len(img.shape)==4 and img.shape[0]==1), "[Error] Strange image shape ({}). Please provide a 3d image".format(img.shape)
     
+    # sanity check: only 0 or 1 label are allowed
+    unq, counts = np.unique(img, return_counts=True)
+    if len(unq)!=2:
+        print("[Warning] Only 2 class annotations are allowed (0 or 1) but found {}. A threshold will be applied but might causes some issues.".format(unq))
+        # set background voxels to 0 and foreground to 1
+        img = (img != unq[np.argmax(counts)]).astype(np.uint8)
+
     # warning if no spacing
     if len(spacing)==0:
         print("[Warning] No spacing has been defined. The result will be expressed in voxel units.")
@@ -313,12 +320,6 @@ def safe_imread(img_path, spacing=()):
             img = np.expand_dims(img, 0)
         img = resize_3d(img, output_shape, order=1, is_msk=True)[0]
     
-    # sanity check: only 0 or 1 label are allowed
-    unq, counts = np.unique(img, return_counts=True)
-    if len(unq)!=2:
-        print("[Warning] Only 2 class annotations are allowed (0 or 1) but found {}. A threshold will be applied but might causes some issues.".format(unq))
-        # set background voxels to 0 and foreground to 1
-        img = (img != unq[np.argmax(counts)]).astype(np.uint8)
     return img, metadata
 
 def compute_volume_surface_sphericity(img, bg=None, spacing=(), verbose=False):
@@ -337,7 +338,7 @@ def compute_volume_surface_sphericity(img, bg=None, spacing=(), verbose=False):
     """
     if bg is None:
         # compute volume with voxel
-        labels = measure.label(img, background=0)
+        labels = measure.label(img)
         unq,vol_voxel = np.unique(labels, return_counts=True)
 
         if len(unq)>2:
@@ -345,7 +346,8 @@ def compute_volume_surface_sphericity(img, bg=None, spacing=(), verbose=False):
 
         if verbose: print("Voxel volume:", vol_voxel[1:])
 
-        bg = unq[0]
+        # use the biggest volume as background
+        bg = unq[np.argmax(vol_voxel)]
     
     # Marching cube
     verts, faces, normals, values = measure.marching_cubes(img, 0.5) 
@@ -376,9 +378,23 @@ def compute_volume_surface_sphericity(img, bg=None, spacing=(), verbose=False):
     return volume, surface, sphericity
 
 def compute_flatness_elongation(img, bg=None, spacing=(), verbose=False):
+    """Compute flatness and elongation of a volumetric object.
+    These are called "Shape factor": https://en.wikipedia.org/wiki/Shape_factor_%28image_analysis_and_microscopy%29#Elongation_shape_factor
+
+    Parameters
+    ----------
+    img : numpy.ndarray
+        Image array.
+    bg : int, default=None
+        Value of the background voxels. If bg is None then use the most frequent value.
+    spacing : tuple, default=()
+        Image spacing.
+    verbose : boolean, default=False
+        Whether to display information.
+    """
     if bg is None:
         # compute volume with voxel
-        labels = measure.label(img, background=0)
+        labels = measure.label(img)
         unq,vol_voxel = np.unique(labels, return_counts=True)
 
         if len(unq)>2:
@@ -386,12 +402,13 @@ def compute_flatness_elongation(img, bg=None, spacing=(), verbose=False):
 
         if verbose: print("Voxel volume:", vol_voxel[1:])
 
-        bg = unq[0]
+        # use the biggest volume as background
+        bg = unq[np.argmax(vol_voxel)]
 
     # get foreground voxel coordinates
     fg = np.argwhere(img != bg)
 
-    # compute barycenter and update fg
+    # compute barycenter and center the foreground voxels
     bary = np.mean(fg,axis=0)
     fg = fg - bary
 
@@ -410,6 +427,41 @@ def compute_flatness_elongation(img, bg=None, spacing=(), verbose=False):
 
     return flatness, elongation
 
+def compute_number_vmean_vtot(img, cc_img, bg=None, spacing=(), verbose=False):
+    """
+    """
+    if bg is None:
+        # compute volume with voxel
+        labels = measure.label(img)
+        unq,vol_voxel = np.unique(labels, return_counts=True)
+
+        if len(unq)>2:
+            print("[Warning] More than one object were found in the image. Number of connected components: {}".format(len(unq)-1))
+
+        if verbose: print("Voxel volume:", vol_voxel[1:])
+
+        # use the biggest volume as background
+        bg = unq[np.argmax(vol_voxel)]
+    
+    # select only chromocenters in the nucleus
+    labels = measure.label(np.logical_and(img!=bg,cc_img!=bg).astype(int), background=bg)
+    
+    # compute volumes
+    unq,vol_voxel = np.unique(labels, return_counts=True)
+
+    # number_vmean_vtot
+    number = len(unq)-1
+    vmean = np.mean(vol_voxel[unq!=bg])
+    vtot = np.sum(vol_voxel[unq!=bg])
+
+    # set the spacing if needed
+    if len(spacing)>0:
+        vmean = vmean*np.prod(spacing)
+        vtot = vtot*np.prod(spacing)
+
+    return number, vmean, vtot
+
+    
 class ComputeParams:
     """Compute Nucleus and Chromocenter parameters.
 
@@ -432,29 +484,51 @@ class ComputeParams:
         'elongation',
     ]
 
-    def __init__(self, nc_path, bg=0, spacing=(), verbose=False):
-        # stores nucleus parameters
+    CHROMOCENTER_KEYS = [
+        'cc_number',
+        'cc_vmean',
+        'cc_vtot',
+        'RHF',
+    ]
+
+    def __init__(self, nc_path, cc_path=None, bg=0, spacing=(), verbose=False):
+        # stores nucleus and chromocenter parameters
         self.nc_params = {}
+        self.cc_params = {}
 
         # path and spacing
         self.nc_path = nc_path
         self.spacing  = np.array(spacing, dtype=np.float64)
 
+        # information
+        if verbose: print("Background voxel is set to", bg)
+
         # read nucleus image and metadata
         self.nc_imag, self.nc_meta = safe_imread(img_path=self.nc_path, spacing=self.spacing)
+
+        # read chromocenter image and metadata
+        self.cc_imag, self.cc_meta = safe_imread(img_path=cc_path, spacing=self.spacing)
 
         # nucleus volume, surface and sphericity computation
         self.nc_params['volume'], self.nc_params['surface'], self.nc_params['sphericity'] = compute_volume_surface_sphericity(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
 
         # nucleus flatness and elongation
         self.nc_params['flatness'], self.nc_params['elongation'] = compute_flatness_elongation(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
+
+        # chromocenters computation
+        self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = compute_number_vmean_vtot(img=self.nc_imag, cc_img=self.cc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
+
+        # add RHF
+        self.cc_params['RHF'] = self.cc_params['cc_vmean']/self.nc_params['volume']
     
     def __str__(self):
         out = "filename: {}\n".format(self.nc_path)
-        return out+"".join("{}: {}\n".format(k, v) for k,v in self.nc_params.items())
+        out += "".join("{}: {}\n".format(k, v) for k,v in self.nc_params.items()) # nucleus
+        out += "".join("{}: {}\n".format(k, v) for k,v in self.cc_params.items()) # chromocenter
+        return out
 
 
-def compute_directory(path, bg=0, spacing=(), out_path="params.csv", verbose=False):
+def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params.csv", verbose=False):
     """Same as compute_volume_surface_sphericity but on a directory. Output results in a csv file.
     """
     if len(spacing)>0:
@@ -463,16 +537,22 @@ def compute_directory(path, bg=0, spacing=(), out_path="params.csv", verbose=Fal
     filenames = os.listdir(path)
     out_params = {'filename': filenames}
     for k in ComputeParams.NUCLEUS_KEYS: out_params[k]=[]
+    for k in ComputeParams.CHROMOCENTER_KEYS: out_params[k]=[]
 
     for i in range(len(filenames)):
         print("[{}/{}] Computing parameters for {}".format(i,len(filenames),filenames[i]))
         img_path = os.path.join(path, filenames[i])
+        cc_img_path = os.path.join(cc_path, filenames[i])
 
          # compute parameters for that image
-        comp_params = ComputeParams(img_path, bg=bg, spacing=spacing, verbose=verbose)
+        comp_params = ComputeParams(nc_path=img_path, cc_path=cc_img_path, bg=bg, spacing=spacing, verbose=verbose)
 
         # store nucleus parameters in the output dictionary
         for k,v in comp_params.nc_params.items():
+            out_params[k] += [v]
+        
+        # store chromocenter parameters
+        for k,v in comp_params.cc_params.items():
             out_params[k] += [v]
 
     df = pd.DataFrame(out_params)
@@ -486,7 +566,9 @@ if __name__=='__main__':
 
     parser = argparse.ArgumentParser(description="Compute objects characteristics.")
     parser.add_argument("-p", "--path", type=str, 
-        help="Path to an image.")
+        help="Path to an image or a folder of images.")
+    parser.add_argument("-cc", "--chromo", type=str, default=None,
+        help="Path to a chromocenter image or a folder of chromocenter images.")
     parser.add_argument("-s", "--spacing", type=str, nargs='+', default=(),
         help="Image spacing. Example: 0.1032 0.1032 0.2")
     parser.add_argument("-b", "--bg_value", type=int, default=0,
@@ -494,7 +576,7 @@ if __name__=='__main__':
     args = parser.parse_args()
     
     if os.path.isdir(args.path):
-        compute_directory(args.path, bg=args.bg_value, spacing=args.spacing, out_path="params.csv", verbose=False)
+        compute_directory(path=args.path, cc_path=args.chromo, bg=args.bg_value, spacing=args.spacing, out_path="params.csv", verbose=False)
     else:
-        params = ComputeParams(args.path, spacing=args.spacing, verbose=False)
+        params = ComputeParams(nc_path=args.path, cc_path=args.chromo, spacing=args.spacing, verbose=False)
         print(params)
