@@ -419,7 +419,7 @@ def compute_flatness_elongation(img, bg=None, spacing=(), verbose=False):
     cov = fg.T.dot(fg)/len(fg)
 
     # get the eigenvalues
-    eigval = np.linalg.eig(cov)[0]
+    eigval = sorted(np.linalg.eig(cov)[0])
 
     # compute flatness and elongation
     flatness = np.sqrt(eigval[1]/eigval[0])
