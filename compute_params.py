@@ -13,6 +13,7 @@ try:
     import tifffile as tiff
     from skimage import measure
     from skimage import io
+    from skimage.transform import resize
     from scipy.spatial import Delaunay
     import numpy as np
     import pandas as pd
@@ -23,9 +24,120 @@ except ImportError as e:
     import tifffile as tiff
     from skimage import measure
     from skimage import io
+    from skimage.transform import resize
     from scipy.spatial import Delaunay
     import numpy as np
     import pandas as pd
+
+#---------------------------------------------------------------------------
+# FOR DEBUGGING ONLY
+# Resizing
+
+def resize_segmentation(segmentation, new_shape, order=3):
+    '''
+    Copied from batch_generator library. Copyleft Fabian Insensee.
+    Resizes a segmentation map. Supports all orders (see skimage documentation). Will transform segmentation map to one
+    hot encoding which is resized and transformed back to a segmentation map.
+    This prevents interpolation artifacts ([0, 0, 2] -> [0, 1, 2])
+    :param segmentation:
+    :param new_shape:
+    :param order:
+    :return:
+    '''
+    tpe = segmentation.dtype
+    unique_labels = np.unique(segmentation)
+    assert len(segmentation.shape) == len(new_shape), "new shape must have same dimensionality as segmentation"
+    if order == 0:
+        return resize(segmentation.astype(float), new_shape, order, mode="edge", clip=True, anti_aliasing=False).astype(tpe)
+    else:
+        reshaped = np.zeros(new_shape, dtype=segmentation.dtype)
+
+        for i, c in enumerate(unique_labels):
+            mask = segmentation == c
+            reshaped_multihot = resize(mask.astype(float), new_shape, order, mode="edge", clip=True, anti_aliasing=False)
+            reshaped[reshaped_multihot >= 0.5] = c
+        return reshaped
+
+def resize_3d(img, output_shape, order=3, is_msk=False, monitor_anisotropy=True, anisotropy_threshold=3):
+    """
+    Resize a 3D image given an output shape.
+    
+    Parameters
+    ----------
+    img : numpy.ndarray
+        3D image to resample.
+    output_shape : tuple, list or numpy.ndarray
+        The output shape. Must have an exact length of 3.
+    order : int
+        The order of the spline interpolation. For images use 3, for mask/label use 0.
+
+    Returns
+    -------
+    new_img : numpy.ndarray
+        Resized image.
+    """
+    assert len(img.shape)==4, '[Error] Please provided a 3D image with "CWHD" format'
+    assert len(output_shape)==3 or len(output_shape)==4, '[Error] Output shape must be "CWHD" or "WHD"'
+    
+    # convert shape to array
+    input_shape = np.array(img.shape)
+    output_shape = np.array(output_shape)
+    if len(output_shape)==3:
+        output_shape = np.append(input_shape[0],output_shape)
+    if np.all(input_shape==output_shape): # return image if no reshaping is needed
+        return img 
+        
+    # resize function definition
+    resize_fct = resize_segmentation if is_msk else resize
+    resize_kwargs = {} if is_msk else {'mode': 'edge', 'anti_aliasing': False}
+        
+    # separate axis --> [Guillaume] I am not sure about the interest of that... 
+    # we only consider the following case: [147,512,513] where the anisotropic axis is undersampled
+    # and not: [147,151,512] where the anisotropic axis is oversampled
+    anistropy_axes = np.array(input_shape[1:]) / input_shape[1:].min()
+    do_anisotropy = monitor_anisotropy and len(anistropy_axes[anistropy_axes>anisotropy_threshold])==2
+    if not do_anisotropy:
+        anistropy_axes = np.array(output_shape[1:]) / output_shape[1:].min()
+        do_anisotropy = monitor_anisotropy and len(anistropy_axes[anistropy_axes>anisotropy_threshold])==2
+        
+    do_additional_resize = False
+    if do_anisotropy: 
+        axis = np.argmin(anistropy_axes)
+        print("[resize] Anisotropy monitor triggered! Anisotropic axis:", axis)
+        
+        # as the output_shape and the input_shape might have different dimension
+        # along the selected axis, we must use a temporary image.
+        tmp_shape = output_shape.copy()
+        tmp_shape[axis+1] = input_shape[axis+1]
+        
+        tmp_img = np.empty(tmp_shape)
+        
+        length = tmp_shape[axis+1]
+        tmp_shape = np.delete(tmp_shape,axis+1)
+        
+        for c in range(input_shape[0]):
+            coord  = [c]+[slice(None)]*len(input_shape[1:])
+
+            for i in range(length):
+                coord[axis+1] = i
+                tmp_img[tuple(coord)] = resize_fct(img[tuple(coord)], tmp_shape[1:], order=order, **resize_kwargs)
+            
+        # if output_shape[axis] is different from input_shape[axis]
+        # we must resize it again. We do it with order = 0
+        if np.any(output_shape!=tmp_img.shape):
+            do_additional_resize = True
+            order = 0
+            img = tmp_img
+        else:
+            new_img = tmp_img
+    
+    # normal resizing
+    if not do_anisotropy or do_additional_resize:
+        new_img = np.empty(output_shape)
+        for c in range(input_shape[0]):
+            new_img[c] = resize_fct(img[c], output_shape[1:], order=order, **resize_kwargs)
+            
+    return new_img
 
 #---------------------------------------------------------------------------
 # Image reader
@@ -177,6 +289,15 @@ def compute_sphericity(volume, surface):
 #---------------------------------------------------------------------------
 # Compute volume, surface and mesh
 
+def get_resample_shape(input_shape, spacing):
+    """Debugging function.
+    """
+    input_shape = np.array(input_shape)
+    spacing = np.array(spacing)
+    if len(input_shape)==4:
+        input_shape=input_shape[1:]
+    return np.round(((spacing/spacing.min())[::-1]*input_shape)).astype(int)
+
 def safe_imread(img_path, spacing=()):
     # read image
     img, metadata = imread(img_path)
@@ -194,6 +315,11 @@ def safe_imread(img_path, spacing=()):
     # warning if no spacing
     if len(spacing)==0:
         print("[Warning] No spacing has been defined. The result will be expressed in voxel units.")
+    # BELOW: for debugging
+    # else:
+    #     output_shape = get_resample_shape(img.shape, spacing)
+    #     img = resize_3d(np.expand_dims(img,0), output_shape, is_msk=True, order=1)[0]
+    # return img, tuple(spacing.min() for _ in spacing)
     
     return img, spacing
 
@@ -307,11 +433,10 @@ def compute_flatness_elongation(img, bg=None, spacing=(), verbose=False):
 
     # eventually resize image
     if len(spacing)>0:
-        spacing = np.array(spacing).reshape(1,3)
+        spacing = np.array(spacing)[::-1].reshape(1,3)
         cov = cov*(spacing.T.dot(spacing))
 
     # get the eigenvalues
-    # eigval = np.real(sorted(np.linalg.eig(cov)[0]))
     eigval = np.real(sorted(np.linalg.eigvals(cov)))
 
     # compute flatness and elongation
@@ -400,6 +525,8 @@ class ComputeParams:
 
         # read nucleus image and metadata
         self.nc_imag, self.spacing = safe_imread(img_path=self.nc_path, spacing=self.spacing)
+
+        if verbose: print("Spacing:", self.spacing)
 
         # read chromocenter image and metadata
         if cc_path is not None:
