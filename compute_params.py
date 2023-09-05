@@ -297,6 +297,14 @@ def compute_flatness_elongation(img, bg=None, spacing=(), verbose=False):
     # get the covariance matrix
     cov = fg.T.dot(fg)/len(fg)
 
+    # other method:
+    # m = measure.moments_central(img, order=2)
+    # cov = np.array([
+    #     [m[2,0,0], m[1,1,0], m[1,0,1]],
+    #     [m[1,1,0], m[0,2,0], m[0,1,1]],
+    #     [m[1,0,1], m[0,1,1], m[0,0,2]],
+    # ])/m[0,0,0]
+
     # eventually resize image
     if len(spacing)>0:
         spacing = np.array(spacing).reshape(1,3)
@@ -435,9 +443,10 @@ def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params.csv
     for i in range(len(filenames)):
         print("[{}/{}] Computing parameters for {}".format(i,len(filenames),filenames[i]))
         img_path = os.path.join(path, filenames[i])
-        if cc_path is not None: cc_img_path = os.path.join(cc_path, filenames[i])
+        if cc_path is not None: 
+            cc_img_path = os.path.join(cc_path, filenames[i])
+            if not os.path.exists(cc_img_path): cc_img_path = None
         else: cc_img_path = None
-        if not os.path.exists(cc_img_path): cc_img_path = None
 
          # compute parameters for that image
         comp_params = ComputeParams(nc_path=img_path, cc_path=cc_img_path, bg=bg, spacing=spacing, verbose=verbose)
