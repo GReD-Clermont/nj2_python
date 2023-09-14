@@ -557,7 +557,7 @@ class ComputeParams:
         return out
 
 
-def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params.csv", verbose=False):
+def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params", verbose=False):
     """Same as compute_volume_surface_sphericity but on a directory. Output results in a csv file.
     """
     if len(spacing)>0:
@@ -588,7 +588,7 @@ def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params.csv
             out_params[k] += [v]
 
     df = pd.DataFrame(out_params)
-    df.to_csv(out_path, index=False)
+    df.to_csv(out_path+'.csv', index=False)
     # df.to_excel("params.xlsx", index=False)
 
 #---------------------------------------------------------------------------
@@ -603,8 +603,8 @@ if __name__=='__main__':
         help="Path to a chromocenter image or a folder of chromocenter images.")
     parser.add_argument("-s", "--spacing", type=str, nargs='+', default=(),
         help="Image spacing. Example: 0.1032 0.1032 0.2")
-    parser.add_argument("-o", "--out_path", type=str, default="params.csv",
-        help="Path to the output CSV file.")
+    parser.add_argument("-o", "--out_path", type=str, default="params",
+        help="(default=params) Path to the output CSV file.")
     parser.add_argument("-b", "--bg_value", type=int, default=0,
         help="(default=0) Value of the background voxels.")
     parser.add_argument("-v", "--verbose", default=False,  action='store_true', dest='verbose',

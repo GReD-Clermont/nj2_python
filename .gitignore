@@ -1,6 +1,7 @@
 # project ignores
 data/
 slurm/
+bash/omero_*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
