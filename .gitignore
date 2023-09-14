@@ -1,6 +1,7 @@
 # project ignores
 data/
 slurm/
+params/
 bash/omero_*
 
 # Byte-compiled / optimized / DLL files

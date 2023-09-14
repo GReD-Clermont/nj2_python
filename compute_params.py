@@ -2,6 +2,7 @@ import argparse
 import os
 import subprocess
 import sys
+import pathlib
 
 def install(packages):
     """Install a list of packages.
@@ -300,6 +301,7 @@ def get_resample_shape(input_shape, spacing):
 
 def safe_imread(img_path, spacing=()):
     # read image
+    assert pathlib.Path(img_path).suffix == '.tif', "[Error] Current version of compute params only works with tif file but attempted to read: {}".format(img_path)
     img, metadata = imread(img_path)
     if len(metadata['spacing'])==3 and len(spacing)==0: spacing = np.array(metadata['spacing'])
 
@@ -508,7 +510,7 @@ class ComputeParams:
         'cc_number',
         'cc_vmean',
         'cc_vtot',
-        'RHF',
+        'volume_RHF',
     ]
 
     def __init__(self, nc_path, cc_path=None, bg=0, spacing=(), verbose=False):
@@ -542,11 +544,11 @@ class ComputeParams:
         if cc_path is not None:
             self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = compute_number_vmean_vtot(img=self.nc_imag, cc_img=self.cc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
 
-            # add RHF
-            self.cc_params['RHF'] = self.cc_params['cc_vtot']/self.nc_params['volume']
+            # add volume_RHF
+            self.cc_params['volume_RHF'] = self.cc_params['cc_vtot']/self.nc_params['volume']
         else:
             self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = 0, 0, 0
-            self.cc_params['RHF'] = np.inf
+            self.cc_params['volume_RHF'] = np.inf
 
         
     
@@ -556,6 +558,17 @@ class ComputeParams:
         out += "".join("{}: {}\n".format(k, v) for k,v in self.cc_params.items()) # chromocenter
         return out
 
+def find_leaf_directory(dic):
+    """Find the leaf directory in a nested directories. There should be only one directory at each level.
+    """
+    root, child_dic = next(os.walk(dic))[:2]
+    child_dic = [os.path.join(root, cd) for cd in child_dic]
+    assert len(child_dic)<=1, "[Error] Found two or more nested directories in {}: {}".format(dic, child_dic)
+    if len(child_dic)==1:
+        return find_leaf_directory(child_dic[0])
+    else:
+        return dic
+        
 
 def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params", verbose=False):
     """Same as compute_volume_surface_sphericity but on a directory. Output results in a csv file.
@@ -563,6 +576,8 @@ def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params", v
     if len(spacing)>0:
         spacing = np.array(spacing, dtype=np.float64)
 
+    path = find_leaf_directory(path)
+    if cc_path is not None: cc_path = find_leaf_directory(cc_path)
     filenames = os.listdir(path)
     out_params = {'filename': filenames}
     for k in ComputeParams.NUCLEUS_KEYS: out_params[k]=[]
