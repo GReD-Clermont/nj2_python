@@ -603,6 +603,8 @@ if __name__=='__main__':
         help="Path to a chromocenter image or a folder of chromocenter images.")
     parser.add_argument("-s", "--spacing", type=str, nargs='+', default=(),
         help="Image spacing. Example: 0.1032 0.1032 0.2")
+    parser.add_argument("-o", "--out_path", type=str, default="params.csv",
+        help="Path to the output CSV file.")
     parser.add_argument("-b", "--bg_value", type=int, default=0,
         help="(default=0) Value of the background voxels.")
     parser.add_argument("-v", "--verbose", default=False,  action='store_true', dest='verbose',
@@ -610,7 +612,13 @@ if __name__=='__main__':
     args = parser.parse_args()
     
     if os.path.isdir(args.path):
-        compute_directory(path=args.path, cc_path=args.chromo, bg=args.bg_value, spacing=args.spacing, out_path="params.csv", verbose=args.verbose)
+        compute_directory(
+            path=args.path,
+            cc_path=args.chromo,
+            bg=args.bg_value,
+            spacing=args.spacing,
+            out_path=args.out_path,
+            verbose=args.verbose)
     else:
         params = ComputeParams(nc_path=args.path, cc_path=args.chromo, spacing=args.spacing, verbose=args.verbose)
         print(params)
