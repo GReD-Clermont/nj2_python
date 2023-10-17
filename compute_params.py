@@ -447,8 +447,8 @@ def compute_flatness_elongation(img, bg=None, spacing=(), verbose=False):
 
     return flatness, elongation
 
-def compute_number_vmean_vtot(img, cc_img, bg=None, spacing=(), verbose=False):
-    """
+def compute_number_vmean_vtot(img, cc_img, bg=None, spacing=(), min_vol=2, verbose=False):
+    """Compute for an nucleus image the number of chromocentres located in the nucleus mask as well as the mean volume and the total volume of the chromocentres. By default, the background voxels are automatical set to the class with the largest number of voxels. `min_vol` is the minimal number of voxels in a connected component region to be considered a valid chromocentre, smaller or equal regions are not considered. 
     """
     if bg is None:
         # compute volume with voxel
@@ -469,6 +469,10 @@ def compute_number_vmean_vtot(img, cc_img, bg=None, spacing=(), verbose=False):
     
     # compute volumes
     unq,vol_voxel = np.unique(labels, return_counts=True)
+
+    # remove too small volumes
+    # if not np.all(vol_voxel>min_vol):
+    unq, vol_voxel = unq[vol_voxel>min_vol], vol_voxel[vol_voxel>min_vol]
 
     # number_vmean_vtot
     number = len(unq)-1
@@ -493,6 +497,10 @@ class ComputeParams:
         Path to the nucleus image.
     bg : int, default=0
         Value of the background voxels.
+    cc_path : str, default=None
+        Path to a chromocentre image.
+    cc_min_vol : int, default=2
+        Minimal number of voxel in chromocentre to be considered valid. Smaller or equal volume are not considered.
     spacing : tuple, default=()
         Image spacing.
     verbose : boolean, default=False
@@ -513,7 +521,7 @@ class ComputeParams:
         'volume_RHF',
     ]
 
-    def __init__(self, nc_path, cc_path=None, bg=0, spacing=(), verbose=False):
+    def __init__(self, nc_path, cc_path=None, bg=0, spacing=(), cc_min_vol=2, verbose=False):
         # stores nucleus and chromocenter parameters
         self.nc_params = {}
         self.cc_params = {}
@@ -542,7 +550,7 @@ class ComputeParams:
 
         # chromocenters computation
         if cc_path is not None:
-            self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = compute_number_vmean_vtot(img=self.nc_imag, cc_img=self.cc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
+            self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = compute_number_vmean_vtot(img=self.nc_imag, cc_img=self.cc_imag, bg=bg, spacing=self.spacing, min_vol=cc_min_vol, verbose=verbose)
 
             # add volume_RHF
             self.cc_params['volume_RHF'] = self.cc_params['cc_vtot']/self.nc_params['volume']
@@ -570,7 +578,7 @@ def find_leaf_directory(dic):
         return dic
         
 
-def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params", verbose=False):
+def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params", cc_min_vol=2, verbose=False):
     """Same as compute_volume_surface_sphericity but on a directory. Output results in a csv file.
     """
     if len(spacing)>0:
@@ -592,7 +600,13 @@ def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params", v
         else: cc_img_path = None
 
          # compute parameters for that image
-        comp_params = ComputeParams(nc_path=img_path, cc_path=cc_img_path, bg=bg, spacing=spacing, verbose=verbose)
+        comp_params = ComputeParams(
+            nc_path=img_path,
+            cc_path=cc_img_path,
+            bg=bg,
+            spacing=spacing,
+            cc_min_vol=cc_min_vol,
+            verbose=verbose)
 
         # store nucleus parameters in the output dictionary
         for k,v in comp_params.nc_params.items():
@@ -622,6 +636,8 @@ if __name__=='__main__':
         help="(default=params) Path to the output CSV file.")
     parser.add_argument("-b", "--bg_value", type=int, default=0,
         help="(default=0) Value of the background voxels.")
+    parser.add_argument("-cv", "--cc_min_vol", type=int, default=2,
+        help="(default=2) Minimal number of voxel in chromocentre to be considered valid. Smaller or equal volume are not considered.")
     parser.add_argument("-v", "--verbose", default=False,  action='store_true', dest='verbose',
         help="Display some information.") 
     args = parser.parse_args()
@@ -633,7 +649,13 @@ if __name__=='__main__':
             bg=args.bg_value,
             spacing=args.spacing,
             out_path=args.out_path,
+            cc_min_vol=args.cc_min_vol,
             verbose=args.verbose)
     else:
-        params = ComputeParams(nc_path=args.path, cc_path=args.chromo, spacing=args.spacing, verbose=args.verbose)
+        params = ComputeParams(
+            nc_path=args.path,
+            cc_path=args.chromo,
+            spacing=args.spacing,
+            cc_min_vol=args.cc_min_vol,
+            verbose=args.verbose)
         print(params)
