@@ -310,7 +310,7 @@ def safe_imread(img_path, spacing=()):
     # sanity check: only 0 or 1 label are allowed
     unq, counts = np.unique(img, return_counts=True)
     if len(unq)!=2:
-        print("[Warning] Only 2 class annotations are allowed (0 or 1) but found {}. A threshold will be applied but might causes some issues.".format(unq))
+        print("[Warning] Only 2 class annotations are allowed (0 or 1) but found {}. A threshold will be applied but might cause some issues.".format(unq))
         # set background voxels to 0 and foreground to 1
         img = (img != unq[np.argmax(counts)]).astype(np.uint8)
 
