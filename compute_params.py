@@ -507,18 +507,18 @@ class ComputeParams:
         Whether to display information.
     """
     NUCLEUS_KEYS = [
-        'volume',
-        'surface',
-        'sphericity',
-        'flatness',
-        'elongation',
+        'Volume',
+        'SurfaceArea',
+        'Sphericity',
+        'Flatness',
+        'Elongation',
     ]
 
     CHROMOCENTER_KEYS = [
-        'cc_number',
-        'cc_vmean',
-        'cc_vtot',
-        'volume_RHF',
+        'NbCc',
+        'VCcMean',
+        'VCcTotal',
+        'VolumeRHF',
     ]
 
     def __init__(self, nc_path, cc_path=None, bg=0, spacing=(), cc_min_vol=2, verbose=False):
@@ -543,20 +543,20 @@ class ComputeParams:
             self.cc_imag, _ = safe_imread(img_path=cc_path, spacing=self.spacing)
 
         # nucleus volume, surface and sphericity computation
-        self.nc_params['volume'], self.nc_params['surface'], self.nc_params['sphericity'] = compute_volume_surface_sphericity(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
+        self.nc_params['Volume'], self.nc_params['SurfaceArea'], self.nc_params['Sphericity'] = compute_volume_surface_sphericity(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
 
         # nucleus flatness and elongation
-        self.nc_params['flatness'], self.nc_params['elongation'] = compute_flatness_elongation(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
+        self.nc_params['Flatness'], self.nc_params['Elongation'] = compute_flatness_elongation(self.nc_imag, bg=bg, spacing=self.spacing, verbose=verbose)
 
         # chromocenters computation
         if cc_path is not None:
-            self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = compute_number_vmean_vtot(img=self.nc_imag, cc_img=self.cc_imag, bg=bg, spacing=self.spacing, min_vol=cc_min_vol, verbose=verbose)
+            self.cc_params['NbCc'], self.cc_params['VCcMean'], self.cc_params['VCcTotal'] = compute_number_vmean_vtot(img=self.nc_imag, cc_img=self.cc_imag, bg=bg, spacing=self.spacing, min_vol=cc_min_vol, verbose=verbose)
 
-            # add volume_RHF
-            self.cc_params['volume_RHF'] = self.cc_params['cc_vtot']/self.nc_params['volume']
+            # add VolumeRHF
+            self.cc_params['VolumeRHF'] = self.cc_params['VCcTotal']/self.nc_params['Volume']
         else:
-            self.cc_params['cc_number'], self.cc_params['cc_vmean'], self.cc_params['cc_vtot'] = 0, 0, 0
-            self.cc_params['volume_RHF'] = np.inf
+            self.cc_params['NbCc'], self.cc_params['VCcMean'], self.cc_params['VCcTotal'] = 0, 0, 0
+            self.cc_params['VolumeRHF'] = np.inf
 
         
     
@@ -587,7 +587,7 @@ def compute_directory(path, cc_path=None, bg=0, spacing=(), out_path="params", c
     path = find_leaf_directory(path)
     if cc_path is not None: cc_path = find_leaf_directory(cc_path)
     filenames = os.listdir(path)
-    out_params = {'filename': filenames}
+    out_params = {'NucleusFileName': filenames}
     for k in ComputeParams.NUCLEUS_KEYS: out_params[k]=[]
     for k in ComputeParams.CHROMOCENTER_KEYS: out_params[k]=[]
 

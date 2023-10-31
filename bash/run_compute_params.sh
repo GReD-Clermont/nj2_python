@@ -8,11 +8,19 @@
 #     -s 0.1032 0.1032 0.2\
 #     -o "params/raw_selection_48h24hL_cot_params_v1_filtered"
 
+# python compute_params.py\
+#     -p "/home/gumougeot/all/codes/python/biom3d/data/nucleus/preds/raw_selection_dry_cot A-C-D-E_A_BIOM/20230913-231641-nucleus_dry_fold0"\
+#     -cc "/home/gumougeot/all/codes/python/biom3d/data/nucleus/preds/raw_selection_dry_cot A-C-D-E_cc_A_BIOM/20230914-015946-chromo_dry_fold0"\
+#     -s 0.1032 0.1032 0.2\
+#     -o "params/raw_selection_dry_cot A-C-D-E_params_v1"\
+#     -cv 0
+
 python compute_params.py\
     -p "/home/gumougeot/all/codes/python/biom3d/data/nucleus/preds/raw_selection_dry_cot A-C-D-E_A_BIOM/20230913-231641-nucleus_dry_fold0"\
-    -cc "/home/gumougeot/all/codes/python/biom3d/data/nucleus/preds/raw_selection_dry_cot A-C-D-E_cc_A_BIOM/20230915-004004-chromo_aline_all_fold0"\
+    -cc "/home/gumougeot/all/codes/python/biom3d/data/nucleus/preds/raw_selection_dry_cot A-C-D-E_cc_A_BIOM/20230914-015946-chromo_dry_fold0"\
     -s 0.1032 0.1032 0.2\
-    -o "params/raw_selection_dry_cot A-C-D-E_params_v1_filtered"
+    -o "params/raw_selection_dry_cot A-C-D-E_params_v1_filtered"\
+    -cv 2
 
 # V2 predictions
 # python compute_params.py\
